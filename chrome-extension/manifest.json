@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Blast Radius Predictor",
+  "version": "1.0",
+  "description": "Predicts microservice cascading failures on GitHub PRs.",
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://github.com/*",
+    "https://*.githubusercontent.com/*",
+    "http://localhost:8080/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://github.com/*/*/pull/*"],
+      "js": ["content.js"]
+    }
+  ]
+}
