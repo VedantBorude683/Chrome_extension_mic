@@ -8,6 +8,8 @@ import java.util.Optional;
 
 @Repository
 public interface ThreatReportRepository extends MongoRepository<ThreatReport, String> {
+
     // Spring automatically generates the MongoDB query just based on this method name!
     Optional<ThreatReport> findByTrackingId(String trackingId);
+
 }

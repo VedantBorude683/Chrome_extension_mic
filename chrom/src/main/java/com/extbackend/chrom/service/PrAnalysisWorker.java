@@ -33,10 +33,12 @@ public class PrAnalysisWorker {
             String codeDiff = payload.getCodeDiff();
 
             // 1. Force the model to act as a machine
-            String systemInstruction = "You are a data-only JSON API. Return ONLY raw JSON. " +
-                    "REQUIRED JSON FORMAT: {\"status\": \"SAFE\", \"severity\": \"NONE\", \"findings\": [\"Clean\"]} " +
-                    "OR {\"status\": \"VULNERABLE\", \"severity\": \"HIGH\", \"findings\": [\"Issue\"]}. " +
-                    "DO NOT PROVIDE EXPLANATIONS. DO NOT USE MARKDOWN.";
+            String systemInstruction ="You are a Blast Radius Detective. Analyze the PR diff against the Target API contract. " +
+                    "Perform two types of checks: " +
+                    "1. BREAKING CHANGES: Missing or renamed fields required by the consumer (Status: VULNERABLE). " +
+                    "2. TYPOS/DRIFT: Inconsistent naming or suspicious spelling changes that might indicate a bug (Status: WARNING). " +
+                    "Return ONLY raw JSON in this format: " +
+                    "{\"status\": \"VULNERABLE\" | \"WARNING\" | \"SAFE\", \"findings\": [\"List your findings here\"]}";
 
             String aiResponse = chatClient.prompt()
                     .system(systemInstruction)
@@ -56,9 +58,7 @@ public class PrAnalysisWorker {
                 cleanJson = "{\"status\": \"SAFE\", \"severity\": \"NONE\", \"findings\": [\"No issues detected\"]}";
             }
 
-            ThreatReport report = new ThreatReport(trackingId, payload.getRepositoryName(), cleanJson);
-            threatReportRepository.save(report);
-            log.info("💾 SUCCESS: Report saved.");
+
 
         } catch (Exception e) {
             log.error("❌ Critical failure", e);

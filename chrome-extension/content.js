@@ -42,27 +42,41 @@ async function pollForReport(trackingId) {
 
         if (response.status === 200) {
             const data = await response.json();
-            const raw = data.aiAnalysis;
 
-            // LOG the raw output so you can see what the AI is actually sending
-            console.log("🔍 DEBUG: AI RAW RESPONSE:", raw);
+            // 1. If it's still pending, wait and loop again
+            if (data.status === "PENDING") {
+                console.log("⏳ Report still pending, waiting...");
+            }
+            // 2. If we got the actual report from the database!
+            else if (data.aiAnalysis) {
+                const raw = data.aiAnalysis;
+                console.log("🔍 DEBUG: AI RAW RESPONSE:", raw);
 
-            // Find the *first* '{' and *last* '}' to isolate JSON
-            const start = raw.indexOf('{');
-            const end = raw.lastIndexOf('}');
+                // Isolate the JSON from the AI string
+                const start = raw.indexOf('{');
+                const end = raw.lastIndexOf('}');
 
-            if (start !== -1 && end !== -1) {
-                const jsonStr = raw.substring(start, end + 1);
-                try {
-                    return JSON.parse(jsonStr);
-                } catch (e) {
-                    console.error("🚨 JSON Parsing Error. Attempted to parse:", jsonStr);
+                if (start !== -1 && end !== -1) {
+                    const jsonStr = raw.substring(start, end + 1);
+                    try {
+                        const parsedData = JSON.parse(jsonStr);
+                        // Map it safely for the UI
+                        return {
+                            status: parsedData.status || "SAFE",
+                            findings: parsedData.findings || ["No findings listed."]
+                        };
+                    } catch (e) {
+                        console.error("🚨 JSON Parsing Error:", e);
+                    }
                 }
+                // If we get here, AI didn't return valid JSON formatting, but we still caught it.
+                return { status: "VULNERABLE", findings: ["AI returned malformed data: " + raw] };
             }
         }
+        // Wait 5 seconds before checking the database again
         await new Promise(r => setTimeout(r, 5000));
     }
-    throw new Error("Analysis failed: AI returned invalid format.");
+    throw new Error("Analysis failed or timed out.");
 }
 
 function injectReportIntoGitHubUI(report) {

@@ -25,7 +25,7 @@ public class PrIngestionGateway {
         this.ingestionService = ingestionService;
     }
 
-    @PostMapping("/analyze")
+    @PostMapping("/analyze-old")
     public ResponseEntity<IngestionResponse> submitPrForAnalysis(@RequestBody PrPayloadRequest payload) {
 
         log.info("🚪 FRONT DESK WOKE UP for repo: {}", payload.getRepositoryName());
