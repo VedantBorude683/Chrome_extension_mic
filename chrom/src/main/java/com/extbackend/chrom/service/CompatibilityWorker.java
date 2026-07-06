@@ -6,6 +6,7 @@ import com.extbackend.chrom.model.ThreatReport;
 import com.extbackend.chrom.model.ContractVerdict; // The new strict record
 import com.extbackend.chrom.repository.ServiceRegistryRepository;
 import com.extbackend.chrom.repository.ThreatReportRepository;
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -19,7 +20,7 @@ import java.util.List;
 @Service
 public class CompatibilityWorker {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
     private final ChatClient chatClient;
     private final ServiceRegistryRepository registryRepository;
     private final ThreatReportRepository threatReportRepository;
@@ -27,6 +28,11 @@ public class CompatibilityWorker {
     public CompatibilityWorker(ChatClient.Builder chatClientBuilder,
                                ServiceRegistryRepository registryRepository,
                                ThreatReportRepository threatReportRepository) {
+
+        // 1. Initialize and configure the ObjectMapper to tolerate AI comments!
+        this.objectMapper = new ObjectMapper();
+        this.objectMapper.configure(JsonParser.Feature.ALLOW_COMMENTS, true);
+
         this.chatClient = chatClientBuilder.build();
         this.registryRepository = registryRepository;
         this.threatReportRepository = threatReportRepository;
@@ -47,8 +53,9 @@ public class CompatibilityWorker {
                 // 1. The Strict Linter Rules
                 // 1. A basic system prompt
                 // 1. Strip the system prompt of any "AI" identity
-                String systemInstruction = "You are a JSON-generating REST API. You cannot speak English. You can only output raw, valid JSON.";
-
+                String systemInstruction = "You are a JSON-generating REST API. You cannot speak English. You can only output raw, valid JSON. " +
+                        "NEVER include comments (// or /*) inside the JSON. " +
+                        "NEVER output conversational text before or after the JSON.";
 // 2. Remove "evaluate" and force the first character
                 String userPrompt = "REQUIRED_CONTRACT:\n" + targetService.getApiContractSchema() +
                         "\n\nPR_STATE:\n" + codeDiff +
