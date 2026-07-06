@@ -3,8 +3,9 @@ package com.extbackend.chrom.service;
 import com.extbackend.chrom.model.PrPayloadRequest;
 import com.extbackend.chrom.model.ServiceRegistry;
 import com.extbackend.chrom.model.ThreatReport;
+import com.extbackend.chrom.model.ContractVerdict; // The new strict record
 import com.extbackend.chrom.repository.ServiceRegistryRepository;
-import com.extbackend.chrom.repository.ThreatReportRepository; // Added import
+import com.extbackend.chrom.repository.ThreatReportRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -21,9 +22,8 @@ public class CompatibilityWorker {
     private final ObjectMapper objectMapper = new ObjectMapper();
     private final ChatClient chatClient;
     private final ServiceRegistryRepository registryRepository;
-    private final ThreatReportRepository threatReportRepository; // Added field
+    private final ThreatReportRepository threatReportRepository;
 
-    // Updated constructor to include ThreatReportRepository
     public CompatibilityWorker(ChatClient.Builder chatClientBuilder,
                                ServiceRegistryRepository registryRepository,
                                ThreatReportRepository threatReportRepository) {
@@ -35,51 +35,91 @@ public class CompatibilityWorker {
     @KafkaListener(topics = "compatibility-checks", groupId = "blast-radius-group")
     public void checkCompatibility(@Payload String jsonPayload, @Header(KafkaHeaders.RECEIVED_KEY) String trackingId) {
         try {
-            // 1. Parse the incoming PR request
             PrPayloadRequest payload = objectMapper.readValue(jsonPayload, PrPayloadRequest.class);
             String sourceRepo = payload.getRepositoryName();
             String codeDiff = payload.getCodeDiff();
 
-            // 2. Find all services that depend on this source repo
             List<ServiceRegistry> affectedServices = registryRepository.findByDependenciesContaining(sourceRepo);
 
-            // 3. Run a compatibility check for EACH affected service
             for (ServiceRegistry targetService : affectedServices) {
                 System.out.println("🔍 Analyzing compatibility between " + sourceRepo + " and " + targetService.getServiceName());
 
-                // The strict system instruction for the AI
-                String systemInstruction = "You are a Strict Contract Enforcer. " +
-                        "Compare the 'PR_STATE' against the 'REQUIRED_CONTRACT'. " +
-                        "REQUIRED_CONTRACT: " + targetService.getApiContractSchema() +
-                        "PR_STATE: " + codeDiff +
-                        "If any field required by the contract is missing or renamed in the PR_STATE, return JSON status 'VULNERABLE'. " +
-                        "Return ONLY: {\"status\": \"VULNERABLE\", \"findings\": [\"Breaking change: field missing\"]} " +
-                        "or {\"status\": \"SAFE\", \"findings\": [\"Contract intact\"]}. " +
-                        "DO NOT use markdown formatting.";
+                // 1. The Strict Linter Rules
+                // 1. A basic system prompt
+                // 1. Strip the system prompt of any "AI" identity
+                String systemInstruction = "You are a JSON-generating REST API. You cannot speak English. You can only output raw, valid JSON.";
 
-                // Combine the PR diff and the database contract
-                String userPrompt = "Source Code Diff:\n" +
-                        (codeDiff != null ? codeDiff.substring(0, Math.min(codeDiff.length(), 1000)) : "") +
-                        "\n\nTarget Service API Contract:\n" + targetService.getApiContractSchema();
+// 2. Remove "evaluate" and force the first character
+                String userPrompt = "REQUIRED_CONTRACT:\n" + targetService.getApiContractSchema() +
+                        "\n\nPR_STATE:\n" + codeDiff +
+                        "\n\n---\n" +
+                        "Generate a JSON response comparing these two. Do not explain. Do not use markdown.\n" +
+                        "Use EXACTLY this format:\n" +
+                        "{\n" +
+                        "  \"reasoning\": \"1 sentence explanation\",\n" +
+                        "  \"status\": \"VULNERABLE\",\n" +
+                        "  \"findings\": [\n" +
+                        "    \"ISSUE: [Name the broken field]\",\n" +
+                        "    \"FIX: [How to fix it]\"\n" +
+                        "  ]\n" +
+                        "}\n\n" +
+                        "START YOUR RESPONSE IMMEDIATELY WITH THE { CHARACTER. DO NOT TYPE ANYTHING ELSE.";
+                try {
+                    // 1. Get the raw string
+                    String rawResponse = chatClient.prompt()
+                            .system(systemInstruction)
+                            .user(userPrompt)
+                            .call()
+                            .content();
 
-                // Call DeepSeek
-                String aiResponse = chatClient.prompt()
-                        .system(systemInstruction)
-                        .user(userPrompt)
-                        .call()
-                        .content();
+                    System.out.println("🤖 DeepSeek RAW Output:\n" + rawResponse);
 
-                System.out.println("🤖 AI Compatibility Verdict for " + targetService.getServiceName() + ": " + aiResponse);
+                    // 2. The Chokehold Parser: Rip out ONLY the JSON
+                    int startIndex = rawResponse.indexOf("{");
+                    int endIndex = rawResponse.lastIndexOf("}");
 
-                // 4. Save to Database
-                ThreatReport report = new ThreatReport(
-                        trackingId,
-                        targetService.getServiceName(),
-                        aiResponse
-                );
-                threatReportRepository.save(report);
+                    if (startIndex == -1 || endIndex == -1 || endIndex < startIndex) {
+                        throw new IllegalStateException("DeepSeek completely failed to generate JSON brackets.");
+                    }
+                    String cleanJson = rawResponse.substring(startIndex, endIndex + 1);
 
-                System.out.println("💾 Verdict saved to DB for tracking ID: " + trackingId);
+                    // 3. The Dynamic Tree Parser (Bulletproof)
+                    com.fasterxml.jackson.databind.JsonNode rootNode = objectMapper.readTree(cleanJson);
+                    String parsedStatus = rootNode.path("status").asText("UNKNOWN");
+
+                    java.util.List<String> safeFindings = new java.util.ArrayList<>();
+                    com.fasterxml.jackson.databind.JsonNode findingsNode = rootNode.path("findings");
+
+                    if (findingsNode.isArray()) {
+                        for (com.fasterxml.jackson.databind.JsonNode element : findingsNode) {
+                            if (element.isObject()) {
+                                // If DeepSeek gave Objects: {"issue": "...", "fixes": "..."}
+                                if (element.has("issue")) safeFindings.add("ISSUE: " + element.path("issue").asText());
+                                if (element.has("fixes")) safeFindings.add("FIX: " + element.path("fixes").asText());
+                            } else {
+                                // If DeepSeek followed instructions and gave Strings
+                                safeFindings.add(element.asText());
+                            }
+                        }
+                    }
+
+                    // 4. Repackage it cleanly for the Chrome Extension
+                    String safeJsonForFrontend = objectMapper.writeValueAsString(java.util.Map.of(
+                            "status", parsedStatus.toUpperCase(),
+                            "findings", safeFindings
+                    ));
+
+                    // 5. Save to Database
+                    ThreatReport report = new ThreatReport(trackingId, targetService.getServiceName(), safeJsonForFrontend);
+                    threatReportRepository.save(report);
+
+                    System.out.println("✅ Bulletproof Verdict saved to DB for tracking ID: " + trackingId);
+
+                } catch (Exception aiException) {
+                    System.err.println("🚨 AI Parsing Failed: " + aiException.getMessage());
+                    String fallbackJson = "{\"status\": \"UNKNOWN\", \"findings\": [\"AI analysis failed due to malformed model output.\"]}";
+                    threatReportRepository.save(new ThreatReport(trackingId, targetService.getServiceName(), fallbackJson));
+                }
             }
 
         } catch (Exception e) {
