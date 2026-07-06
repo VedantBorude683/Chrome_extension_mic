@@ -38,6 +38,6 @@ jobs:
           echo "Payload generated successfully. Sending..."
           
           # 🚨 IMPORTANT: Replace this URL with your Ngrok URL while testing locally!
-          curl -X POST "https://iraida-tantalous-lionel.ngrok-free.dev /api/v1/registry/sync" \
-          -H "Content-Type: application/json" \
-          -d "$JSON_PAYLOAD"
+          curl -X POST "https://iraida-tantalous-lionel.ngrok-free.dev/api/v1/registry/sync" \
+            -H "Content-Type: application/json" \
+            -d "$JSON_PAYLOAD"
