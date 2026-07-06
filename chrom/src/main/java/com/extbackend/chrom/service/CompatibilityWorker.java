@@ -14,6 +14,8 @@ import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
+import org.springframework.ai.ollama.api.OllamaChatOptions;
+
 
 import java.util.List;
 
@@ -73,22 +75,21 @@ public class CompatibilityWorker {
                         "START YOUR RESPONSE IMMEDIATELY WITH THE { CHARACTER. DO NOT TYPE ANYTHING ELSE.";
                 try {
                     // 1. Get the raw string
-                    String rawResponse = chatClient.prompt()
+                    String aiResponse = chatClient.prompt()
                             .system(systemInstruction)
                             .user(userPrompt)
                             .call()
                             .content();
-
-                    System.out.println("🤖 DeepSeek RAW Output:\n" + rawResponse);
+                    System.out.println("🤖 DeepSeek RAW Output:\n" + aiResponse);
 
                     // 2. The Chokehold Parser: Rip out ONLY the JSON
-                    int startIndex = rawResponse.indexOf("{");
-                    int endIndex = rawResponse.lastIndexOf("}");
+                    int startIndex = aiResponse.indexOf("{");
+                    int endIndex = aiResponse.lastIndexOf("}");
 
                     if (startIndex == -1 || endIndex == -1 || endIndex < startIndex) {
                         throw new IllegalStateException("DeepSeek completely failed to generate JSON brackets.");
                     }
-                    String cleanJson = rawResponse.substring(startIndex, endIndex + 1);
+                    String cleanJson = aiResponse.substring(startIndex, endIndex + 1);
 
                     // 3. The Dynamic Tree Parser (Bulletproof)
                     com.fasterxml.jackson.databind.JsonNode rootNode = objectMapper.readTree(cleanJson);
@@ -134,4 +135,8 @@ public class CompatibilityWorker {
             e.printStackTrace();
         }
     }
+
 }
+
+
+

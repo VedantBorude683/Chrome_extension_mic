@@ -100,17 +100,21 @@ function generateMiniMapSVG(status, services) {
     let linesHtml = '';
 
     // Dynamically calculate X coordinates based on how many real services there are
+    // Dynamically calculate X coordinates based on how many real services there are
     services.forEach((serviceName, index) => {
         const spacing = 280 / (services.length + 1);
         const xCenter = spacing * (index + 1);
 
+        //  FIX: Split the string by the '/' and grab the second half (the repo name)
+        const displayName = serviceName.includes('/') ? serviceName.split('/')[1] : serviceName;
+
         // Draw Animated Line
         linesHtml += `<line x1="140" y1="70" x2="${xCenter}" y2="35" stroke="${color}" stroke-width="2" marker-end="url(#arrow)" stroke-dasharray="4" style="animation: dash 20s linear infinite;" />`;
 
-        // Draw Service Node
+        // Draw Service Node (Using displayName instead of serviceName)
         nodesHtml += `
             <rect x="${xCenter - 40}" y="15" width="80" height="26" rx="4" fill="rgba(48, 54, 61, 0.9)" border="1px solid rgba(255,255,255,0.1)"/>
-            <text x="${xCenter}" y="32" fill="#c9d1d9" font-size="9" text-anchor="middle" font-weight="600">${serviceName.substring(0, 15)}</text>
+            <text x="${xCenter}" y="32" fill="#c9d1d9" font-size="9" text-anchor="middle" font-weight="600">${displayName.substring(0, 15)}</text>
         `;
     });
 
