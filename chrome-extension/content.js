@@ -121,7 +121,7 @@ function generateMiniMapSVG(status, services) {
     return `
         <svg viewBox="0 0 280 120" style="width: 100%; height: auto; border-radius: 8px; background: rgba(0,0,0,0.2); margin-bottom: 15px; border: 1px solid rgba(255,255,255,0.05);">
             <defs>
-                <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
                     <path d="M 0 0 L 10 5 L 0 10 z" fill="${color}" />
                 </marker>
             </defs>
@@ -196,7 +196,7 @@ function injectReportIntoGitHubUI(report) {
             <div style="display: flex; align-items: center; gap: 12px; pointer-events: none;">
                 <img src="https://assets.streamlinehq.com/image/private/w_300,h_300,ar_1/f_auto/v1/icons/all-icons/shield-qepmdc10jsro72qlofy88d.png/shield-a0yea58cq0hotm9wdyc7v.png" 
                      style="width: 28px; height: 28px; filter: drop-shadow(0 0 5px ${statusColor});">
-                <h3 style="margin:0; font-size: 16px; font-weight: 600; letter-spacing: 0.5px;">Blast Radius</h3>
+                <h3 style="margin:0; font-size: 16px; font-weight: 600; letter-spacing: 0.5px;">Tether</h3>
             </div>
             <button class="br-close-btn" id="br-close-btn">&times;</button>
         </div>
