@@ -26,9 +26,11 @@ public class PrAnalysisWorker {
         this.threatReportRepository = threatReportRepository;
     }
 
-    @KafkaListener(topics = "pr-analysis-requests", groupId = "blast-radius-group")
-    public void consumePrFromKafka(@Payload String jsonPayload, @Header(KafkaHeaders.RECEIVED_KEY) String trackingId) {
+    @KafkaListener(topics = "pr-analysis-requests", groupId = "blast-radius-group-v2")
+    public void consumePrFromKafka(@Payload String jsonPayload, @Header(name = KafkaHeaders.RECEIVED_KEY, required = false) String trackingId) {
         try {
+            String finalTrackingId = (trackingId != null) ? trackingId : "NO-ID";
+            log.info("Processing PR with ID: {}", finalTrackingId);
             PrPayloadRequest payload = objectMapper.readValue(jsonPayload, PrPayloadRequest.class);
             String codeDiff = payload.getCodeDiff();
 
