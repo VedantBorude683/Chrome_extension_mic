@@ -52,7 +52,10 @@ public class PrAnalysisWorker {
             log.info("Fetching raw code diff from: {}", diffUrl);
 
             // 3. Fetch the actual code directly from GitHub
-            HttpClient client = HttpClient.newHttpClient();
+
+            HttpClient client = HttpClient.newBuilder()
+                    .followRedirects(HttpClient.Redirect.ALWAYS)
+                    .build();
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(diffUrl))
                     .GET()
