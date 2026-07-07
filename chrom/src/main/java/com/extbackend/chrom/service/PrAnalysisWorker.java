@@ -38,9 +38,10 @@ public class PrAnalysisWorker {
             String finalTrackingId = (trackingId != null) ? trackingId : "NO-ID";
             log.info("Processing PR with ID: {}", finalTrackingId);
 
+
             // 1. Parse the massive GitHub JSON dynamically
             JsonNode rootNode = objectMapper.readTree(jsonPayload);
-
+            String repoName = rootNode.path("repository").path("name").asText("unknown-repo");
             // 2. Safely grab the diff_url
             JsonNode prNode = rootNode.path("pull_request");
             if (prNode.isMissingNode()) {
@@ -49,7 +50,7 @@ public class PrAnalysisWorker {
             }
 
             String diffUrl = prNode.path("diff_url").asText();
-            log.info("Fetching raw code diff from: {}", diffUrl);
+            log.info("Fetching raw code diff from: {}", diffUrl,repoName);
 
             // 3. Fetch the actual code directly from GitHub
 
@@ -91,10 +92,15 @@ public class PrAnalysisWorker {
                 log.warn("AI returned conversational text. Forcing default JSON.");
                 cleanJson = "{\"status\": \"SAFE\", \"severity\": \"NONE\", \"findings\": [\"No issues detected\"]}";
             }
+            try {
+                ThreatReport report = new ThreatReport(finalTrackingId, repoName, cleanJson);
+                threatReportRepository.save(report);
+                log.info("💾 Saved AI report to database for tracking ID: {} | Repo: {}", finalTrackingId, repoName);
+            } catch (Exception dbError) {
+                log.error("Failed to save report to DB", dbError);
+            }
 
 
-
-            // ... keep your existing JSON cleanup logic below ...
 
         } catch (Exception e) {
             log.error("❌ Critical failure during processing!", e);
