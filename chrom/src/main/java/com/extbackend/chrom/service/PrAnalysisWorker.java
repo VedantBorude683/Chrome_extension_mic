@@ -3,6 +3,7 @@ package com.extbackend.chrom.service;
 import com.extbackend.chrom.model.PrPayloadRequest;
 import com.extbackend.chrom.model.ThreatReport;
 import com.extbackend.chrom.repository.ThreatReportRepository;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,6 +13,11 @@ import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
+
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 
 @Service
 public class PrAnalysisWorker {
@@ -31,10 +37,33 @@ public class PrAnalysisWorker {
         try {
             String finalTrackingId = (trackingId != null) ? trackingId : "NO-ID";
             log.info("Processing PR with ID: {}", finalTrackingId);
-            PrPayloadRequest payload = objectMapper.readValue(jsonPayload, PrPayloadRequest.class);
-            String codeDiff = payload.getCodeDiff();
 
-            // 1. Force the model to act as a machine
+            // 1. Parse the massive GitHub JSON dynamically
+            JsonNode rootNode = objectMapper.readTree(jsonPayload);
+
+            // 2. Safely grab the diff_url
+            JsonNode prNode = rootNode.path("pull_request");
+            if (prNode.isMissingNode()) {
+                log.warn("Not a Pull Request event. Ignoring.");
+                return;
+            }
+
+            String diffUrl = prNode.path("diff_url").asText();
+            log.info("Fetching raw code diff from: {}", diffUrl);
+
+            // 3. Fetch the actual code directly from GitHub
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(diffUrl))
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            String codeDiff = response.body();
+
+            log.info("✅ Successfully downloaded code diff. Length: {} characters", codeDiff.length());
+
+            // 4. Force the model to act as a machine
             String systemInstruction ="You are a Blast Radius Detective. Analyze the PR diff against the Target API contract. " +
                     "Perform two types of checks: " +
                     "1. BREAKING CHANGES: Missing or renamed fields required by the consumer (Status: VULNERABLE). " +
@@ -42,15 +71,15 @@ public class PrAnalysisWorker {
                     "Return ONLY raw JSON in this format: " +
                     "{\"status\": \"VULNERABLE\" | \"WARNING\" | \"SAFE\", \"findings\": [\"List your findings here\"]}";
 
+            // 5. Send the REAL code to DeepSeek
             String aiResponse = chatClient.prompt()
                     .system(systemInstruction)
-                    .user("Analyze this diff: " + (codeDiff != null ? codeDiff.substring(0, Math.min(codeDiff.length(), 1000)) : ""))
+                    .user("Analyze this diff:\n" + codeDiff)
                     .call()
                     .content();
 
             log.info("AI RAW: {}", aiResponse);
 
-            // 2. The Hard Validator: Ignore everything unless it looks like JSON
             String cleanJson;
             if (aiResponse.trim().startsWith("{")) {
                 cleanJson = aiResponse.trim();
@@ -62,8 +91,11 @@ public class PrAnalysisWorker {
 
 
 
+            // ... keep your existing JSON cleanup logic below ...
+
         } catch (Exception e) {
-            log.error("❌ Critical failure", e);
+            log.error("❌ Critical failure during processing!", e);
+            e.printStackTrace();
         }
     }
 }
