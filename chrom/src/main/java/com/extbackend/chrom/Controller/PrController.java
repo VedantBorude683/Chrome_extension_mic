@@ -61,7 +61,6 @@ public class PrController {
     }
 
     // 2. The Polling Endpoint
-    // Inside PrController.java
     @GetMapping("/report/{trackingId}")
     public ResponseEntity<?> getAnalysisReport(@PathVariable String trackingId) {
 
@@ -89,11 +88,17 @@ public class PrController {
 
                     // 4. Tag the findings with the service name so the UI is clear
                     com.fasterxml.jackson.databind.JsonNode findingsNode = aiData.path("findings");
+
                     if (findingsNode.isArray()) {
+                        // AI returned an array of findings
                         for (com.fasterxml.jackson.databind.JsonNode finding : findingsNode) {
                             aggregatedFindings.add("[" + serviceName + "] " + finding.asText());
                         }
+                    } else if (findingsNode.isTextual()) {
+                        // 🚀 NEW FIX: Catch the AI if it returns a single String instead of an Array!
+                        aggregatedFindings.add("[" + serviceName + "] " + findingsNode.asText());
                     }
+
                 } catch (Exception e) {
                     System.err.println("Failed to parse AI analysis for report: " + report.getId());
                 }
