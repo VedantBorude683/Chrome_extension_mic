@@ -68,13 +68,15 @@ public class PrAnalysisWorker {
             log.info("✅ Successfully downloaded code diff. Length: {} characters", codeDiff.length());
 
             // 4. Force the model to act as a machine
-            String systemInstruction ="You are a Blast Radius Detective. Analyze the PR diff against the Target API contract. " +
-                    "Perform two types of checks: " +
-                    "1. BREAKING CHANGES: Missing or renamed fields required by the consumer (Status: VULNERABLE). " +
-                    "2. TYPOS/DRIFT: Inconsistent naming or suspicious spelling changes that might indicate a bug (Status: WARNING). " +
-                    "Return ONLY raw JSON in this format: " +
-                    "{\"status\": \"VULNERABLE\" | \"WARNING\" | \"SAFE\", \"findings\": [\"List your findings here\"]}";
-
+            String systemInstruction = "You are an Enterprise API Detective. Analyze the provided PR code diff. " +
+                    "Identify if this change breaks backward compatibility for downstream consumers (e.g., changing an Integer to a String). " +
+                    "If it is a breaking change, return 'VULNERABLE'. " +
+                    "You MUST provide a highly detailed explanation suitable for a client or senior engineer. " +
+                    "Explain exactly WHAT changed, WHY it will crash the downstream consumer, and HOW the developer must fix it. " +
+                    "Return ONLY raw JSON in this exact format: " +
+                    "{\"status\": \"VULNERABLE\" | \"SAFE\", " +
+                    "\"affected_consumer\": \"shipping-fulfillment-engine\", " +
+                    "\"findings\": [\"Detailed explanation of what changed...\", \"Detailed impact on the client...\", \"Recommended fix...\"]}";
             // 5. Send the REAL code to DeepSeek
             String aiResponse = chatClient.prompt()
                     .system(systemInstruction)

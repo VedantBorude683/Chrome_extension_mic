@@ -68,35 +68,38 @@ public class PrController {
         java.util.List<ThreatReport> reports = threatReportRepository.findAllByTrackingId(trackingId);
 
         if (!reports.isEmpty()) {
-            java.util.List<String> affectedServices = new java.util.ArrayList<>();
-            java.util.List<String> aggregatedFindings = new java.util.ArrayList<>();
+            java.util.Set<String> affectedServices = new java.util.LinkedHashSet<>();
+            java.util.Set<String> aggregatedFindings = new java.util.LinkedHashSet<>();
             boolean isGloballyVulnerable = false;
 
             // 2. Loop through every affected microservice
+            // 2. Loop through every affected microservice
             for (ThreatReport report : reports) {
-                String serviceName = report.getRepositoryName();
-                affectedServices.add(serviceName);
-
                 try {
                     // Crack open the JSON string the AI generated
                     com.fasterxml.jackson.databind.JsonNode aiData = objectMapper.readTree(report.getAiAnalysis());
 
-                    // 3. Status Escalation: If even ONE service is broken, the whole PR is VULNERABLE
+                    // 🚀 NEW: Grab the DOWNSTREAM consumer from the AI's JSON!
+                    // If the AI doesn't provide one, it defaults back to the repository name.
+                    String consumerName = aiData.path("affected_consumer").asText(report.getRepositoryName());
+
+                    // Add the CONSUMER to the graph, not the origin repo!
+                    affectedServices.add(consumerName);
+
+                    // 3. Status Escalation
                     if ("VULNERABLE".equalsIgnoreCase(aiData.path("status").asText())) {
                         isGloballyVulnerable = true;
                     }
 
-                    // 4. Tag the findings with the service name so the UI is clear
+                    // 4. Tag the findings with the consumer name so the UI is clear
                     com.fasterxml.jackson.databind.JsonNode findingsNode = aiData.path("findings");
 
                     if (findingsNode.isArray()) {
-                        // AI returned an array of findings
                         for (com.fasterxml.jackson.databind.JsonNode finding : findingsNode) {
-                            aggregatedFindings.add("[" + serviceName + "] " + finding.asText());
+                            aggregatedFindings.add("[" + consumerName + "] " + finding.asText());
                         }
                     } else if (findingsNode.isTextual()) {
-                        // 🚀 NEW FIX: Catch the AI if it returns a single String instead of an Array!
-                        aggregatedFindings.add("[" + serviceName + "] " + findingsNode.asText());
+                        aggregatedFindings.add("[" + consumerName + "] " + findingsNode.asText());
                     }
 
                 } catch (Exception e) {
