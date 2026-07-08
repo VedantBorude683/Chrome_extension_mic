@@ -37,7 +37,7 @@ public class PrController {
     public ResponseEntity<?> analyzePullRequest(@RequestBody PrPayloadRequest request) {
         try {
             // Generate a unique tracking ID for this specific PR analysis job
-            String trackingId = UUID.randomUUID().toString();
+            String trackingId = "NO-ID";
             String payloadJson = objectMapper.writeValueAsString(request);
 
             // Build a Kafka message with the tracking ID attached as a header
